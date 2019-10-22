@@ -35,21 +35,24 @@ class InvoiceParser implements DocumentParserInterface
     {
         $xpt = $this->getXpath($value);
         $inv = new Invoice();
+        $version = $this->defValue($xpt->query('/xt:Invoice/cbc:UBLVersionID'));
         $docFac = explode('-', $this->defValue($xpt->query('/xt:Invoice/cbc:ID')));
+        $issueDate = $this->defValue($xpt->query('/xt:Invoice/cbc:IssueDate'));
+        $issueTime = $this->defValue($xpt->query('/xt:Invoice/cbc:IssueTime'));
+        $dateTime = new \DateTime($issueDate . ' ' . $issueTime);
         $inv->setSerie($docFac[0])
             ->setCorrelativo($docFac[1])
-            ->setTipoDoc($this->defValue($xpt->query('/xt:Invoice/cbc:InvoiceTypeCode')))
+            ->setTipoDoc((string)$this->defValue($xpt->query('/xt:Invoice/cbc:InvoiceTypeCode')))
             ->setTipoMoneda($this->defValue($xpt->query('/xt:Invoice/cbc:DocumentCurrencyCode')))
-            ->setFechaEmision(new \DateTime($this->defValue($xpt->query('/xt:Invoice/cbc:IssueDate'))))
+            ->setFechaEmision($dateTime)
             ->setCompany($this->getCompany($xpt))
             ->setClient($this->getClient($xpt));
 
         $extensions = $xpt->query('/xt:Invoice/ext:UBLExtensions')->item(0);
-        $additional = $xpt->query('//sac:AdditionalInformation', $extensions)->item(0);
-        $this->loadTotals($inv, $xpt, $additional);
+        $this->loadTotals($inv, $xpt);
         $this->loadTributos($inv, $xpt);
         $monetaryTotal = $xpt->query('/xt:Invoice/cac:LegalMonetaryTotal')->item(0);
-        $inv->setTipoOperacion($this->defValue($xpt->query('sac:SUNATTransaction/cbc:ID', $additional)))
+        $inv->setTipoOperacion($xpt->query('/xt:Invoice/cbc:InvoiceTypeCode')->item(0)->getAttribute('listID'))
             ->setSumDsctoGlobal(floatval($this->defValue($xpt->query('cbc:AllowanceTotalAmount', $monetaryTotal),0)))
             ->setTotalAnticipos(floatval($this->defValue($xpt->query('cbc:PrepaidAmount', $monetaryTotal),0)))
             ->setAnticipos(iterator_to_array($this->getPrepayments($xpt)))
@@ -86,17 +89,13 @@ class InvoiceParser implements DocumentParserInterface
         return $nodeList->item(0)->nodeValue;
     }
 
-    private function loadTotals(Invoice $inv, \DOMXPath $xpt, \DOMNode $node = null)
+    private function loadTotals(Invoice $inv, \DOMXPath $xpt)
     {
-        if (empty($node)) {
-            return;
-        }
-
-        $totals = $xpt->query('sac:AdditionalMonetaryTotal', $node);
+        $totals = $xpt->query('/xt:Invoice/cac:LegalMonetaryTotal')->item(0)->childNodes;
         foreach ($totals as $total) {
+            var_dump($total);
             /**@var $total \DOMElement*/
-            $id = trim($this->defValue($xpt->query('cbc:ID', $total)));
-            $val = floatval($this->defValue($xpt->query('cbc:PayableAmount', $total),0));
+            $tagValue = floatval($this->defValue($xpt->query('cbc:PayableAmount', $total),0));
             switch ($id) {
                 case '1001':
                     $inv->setMtoOperGravadas($val);
@@ -202,7 +201,7 @@ class InvoiceParser implements DocumentParserInterface
         $node = $xp->query('/xt:Invoice/cac:AccountingSupplierParty')->item(0);
 
         $cl = new Company();
-        $cl->setRuc($this->defValue($xp->query('cbc:CustomerAssignedAccountID', $node)))
+        $cl->setRuc($this->defValue($xp->query('cac:Party/cac:PartyIdentification/cbc:ID', $node)))
             ->setNombreComercial($this->defValue($xp->query('cac:Party/cac:PartyName/cbc:Name', $node)))
             ->setRazonSocial($this->defValue($xp->query('cac:Party/cac:PartyLegalEntity/cbc:RegistrationName', $node)))
             ->setAddress($this->getAddress($xp, $node));
@@ -244,16 +243,16 @@ class InvoiceParser implements DocumentParserInterface
      */
     private function getAddress(\DOMXPath $xp, $node)
     {
-        $nAd = $xp->query('cac:Party/cac:PostalAddress', $node);
+        $nAd = $xp->query('cac:Party/cac:PartyLegalEntity/cac:RegistrationAddress', $node);
         if ($nAd->length > 0) {
             $address = $nAd->item(0);
 
             return (new Address())
-                ->setDireccion($this->defValue($xp->query('cbc:StreetName', $address)))
+                ->setDireccion($this->defValue($xp->query('cac:AddressLine/cbc:Line', $address)))
                 ->setDepartamento($this->defValue($xp->query('cbc:CityName', $address)))
                 ->setProvincia($this->defValue($xp->query('cbc:CountrySubentity', $address)))
                 ->setDistrito($this->defValue($xp->query('cbc:District', $address)))
-                ->setUbigueo($this->defValue($xp->query('cbc:ID', $address)));
+                ->setUbigueo($this->defValue($xp->query('cbc:CountrySubentityCode', $address)));
         }
 
         return null;
