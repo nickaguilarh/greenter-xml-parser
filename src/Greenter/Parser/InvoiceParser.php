@@ -291,13 +291,16 @@ class InvoiceParser implements DocumentParserInterface
             foreach ($taxs as $tax) {
                 $name = $this->defValue($xpt->query('cac:TaxCategory/cac:TaxScheme/cbc:Name', $tax));
                 $val = floatval($this->defValue($xpt->query('cbc:TaxAmount', $tax),0));
+                $percentage = floatval($this->defValue($xpt->query('cac:TaxCategory/cbc:Percent', $tax)));
                 switch ($name) {
                     case 'IGV':
                         $det->setIgv($val);
+                        $det->setIgvPorc($percentage);
                         $det->setTipAfeIgv($this->defValue($xpt->query('cac:TaxCategory/cbc:TaxExemptionReasonCode', $tax)));
                         break;
                     case 'ISC':
                         $det->setIsc($val);
+                        $det->setIscPorc($percentage);
                         $det->setTipSisIsc($this->defValue($xpt->query('cac:TaxCategory/cbc:TierRange', $tax)));
                         break;
                 }
