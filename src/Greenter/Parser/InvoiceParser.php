@@ -29,13 +29,16 @@ class InvoiceParser implements DocumentParserInterface
 {
     /**
      * @param $value
+     *
      * @return DocumentInterface
+     * @throws \Exception
      */
     public function parse($value)
     {
         $xpt = $this->getXpath($value);
         $inv = new Invoice();
         $version = $this->defValue($xpt->query('/xt:Invoice/cbc:UBLVersionID'));
+        $inv->setUblVersion($version);
         $docFac = explode('-', $this->defValue($xpt->query('/xt:Invoice/cbc:ID')));
         $issueDate = $this->defValue($xpt->query('/xt:Invoice/cbc:IssueDate'));
         $issueTime = $this->defValue($xpt->query('/xt:Invoice/cbc:IssueTime'));
@@ -48,7 +51,6 @@ class InvoiceParser implements DocumentParserInterface
             ->setCompany($this->getCompany($xpt))
             ->setClient($this->getClient($xpt));
 
-        $extensions = $xpt->query('/xt:Invoice/ext:UBLExtensions')->item(0);
         $this->loadTotals($inv, $xpt);
         $this->loadTributos($inv, $xpt);
         $monetaryTotal = $xpt->query('/xt:Invoice/cac:LegalMonetaryTotal')->item(0);
@@ -120,16 +122,16 @@ class InvoiceParser implements DocumentParserInterface
                         break;
                     case '2001':
                         $inv->setPerception((new SalePerception())
-                            ->setCodReg($xpt->query('cbc:ID', $total)->item(0)->getAttribute('schemeID'))
+                            ->setCodReg($xpt->query('cbc:ID', $node)->item(0)->getAttribute('schemeID'))
                             ->setMto($val)
-                            ->setMtoBase(floatval($this->defValue($xpt->query('sac:ReferenceAmount', $total), 0)))
-                            ->setMtoTotal(floatval($this->defValue($xpt->query('sac:TotalAmount', $total),0))));
+                            ->setMtoBase(floatval($this->defValue($xpt->query('sac:ReferenceAmount', $node), 0)))
+                            ->setMtoTotal(floatval($this->defValue($xpt->query('sac:TotalAmount', $node),0))));
                         break;
                     case '2003':
                         $inv->setDetraccion((new Detraction())
                             ->setMount($val)
-                            ->setPercent(floatval($this->defValue($xpt->query('cbc:Percent', $total),0)))
-                            ->setValueRef(floatval($this->defValue($xpt->query('sac:ReferenceAmount', $total),0))));
+                            ->setPercent(floatval($this->defValue($xpt->query('cbc:Percent', $node),0)))
+                            ->setValueRef(floatval($this->defValue($xpt->query('sac:ReferenceAmount', $node),0))));
                         break;
                     case 'cbc:AllowanceTotalAmount':
                         $inv->setMtoDescuentos(floatval($val));
@@ -262,7 +264,8 @@ class InvoiceParser implements DocumentParserInterface
                 ->setDepartamento($this->defValue($xp->query('cbc:CityName', $address)))
                 ->setProvincia($this->defValue($xp->query('cbc:CountrySubentity', $address)))
                 ->setDistrito($this->defValue($xp->query('cbc:District', $address)))
-                ->setUbigueo($this->defValue($xp->query('cbc:CountrySubentityCode', $address)));
+                ->setUbigueo($this->defValue($xp->query('cbc:ID', $address)))
+                ->setCodLocal($this->defValue($xp->query('cbc:AddressTypeCode', $address)));
         }
 
         return null;
@@ -295,12 +298,12 @@ class InvoiceParser implements DocumentParserInterface
                 switch ($name) {
                     case 'IGV':
                         $det->setIgv($val);
-                        $det->setIgvPorc($percentage);
+                        $det->setPorcentajeIgv($percentage);
                         $det->setTipAfeIgv($this->defValue($xpt->query('cac:TaxCategory/cbc:TaxExemptionReasonCode', $tax)));
                         break;
                     case 'ISC':
                         $det->setIsc($val);
-                        $det->setIscPorc($percentage);
+                        $det->setPorcentajeIsc($percentage);
                         $det->setTipSisIsc($this->defValue($xpt->query('cac:TaxCategory/cbc:TierRange', $tax)));
                         break;
                 }
