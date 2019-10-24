@@ -57,7 +57,6 @@ class InvoiceParser implements DocumentParserInterface
         $inv->setTipoOperacion($xpt->query('/xt:Invoice/cbc:InvoiceTypeCode')->item(0)->getAttribute('listID'))
             ->setTotalAnticipos(floatval($this->defValue($xpt->query('cbc:PrepaidAmount', $monetaryTotal),0)))
             ->setAnticipos(iterator_to_array($this->getPrepayments($xpt)))
-            ->setMtoOtrosTributos(floatval($this->defValue($xpt->query('cbc:ChargeTotalAmount', $monetaryTotal), 0)))
             ->setMtoImpVenta(floatval($this->defValue($xpt->query('cbc:PayableAmount', $monetaryTotal),0)))
             ->setDetails(iterator_to_array($this->getDetails($xpt)))
             ->setLegends(iterator_to_array($this->getLegends($inv,$xpt)));
@@ -284,35 +283,50 @@ class InvoiceParser implements DocumentParserInterface
         $nodes = $xpt->query('/xt:Invoice/cac:InvoiceLine');
 
         foreach ($nodes as $node) {
-            $quant = $xpt->query('cbc:InvoicedQuantity', $node)->item(0);
+            $qt = $xpt->query('cbc:InvoicedQuantity', $node)->item(0);
             $det = new SaleDetail();
-            $description = explode(' ',$this->defValue($xpt->query('cac:Item/cbc:Description', $node)));
-            $productCode = $description[0];
-            unset($description[0]);
-            $description = implode(' ', $description);
-            $det->setCantidad(floatval($quant->nodeValue))
-                ->setUnidad($quant->getAttribute('unitCode'))
+            $det->setCantidad(floatval($qt->nodeValue))
+                ->setUnidad($qt->getAttribute('unitCode'))
                 ->setMtoValorVenta(floatval($this->defValue($xpt->query('cbc:LineExtensionAmount', $node))))
                 ->setMtoValorUnitario(floatval($this->defValue($xpt->query('cac:Price/cbc:PriceAmount', $node))))
-                ->setDescripcion($description)
-                ->setCodProducto($productCode)
-                ->setCodProdSunat($this->defValue($xpt->query('cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode', $node)));
+                ->setDescripcion($this->defValue($xpt->query('cac:Item/cbc:Description', $node)))
+                ->setCodProducto($this->defValue($xpt->query('cac:Item/cac:SellersItemIdentification/cbc:ID', $node)))
+                ->setCodProdSunat($this->defValue($xpt->query('cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode', $node)))
+                ->setCodProdGS1($this->defValue($xpt->query('cac:Item/cac:StandardItemIdentification/cbc:ID', $node)))
+                ->setTotalImpuestos(floatval($this->defValue($xpt->query('cac:TaxTotal/cac:TaxSubtotal/cbc:TaxAmount', $node))))
+            ;
 
             $taxs = $xpt->query('cac:TaxTotal/cac:TaxSubtotal', $node);
             foreach ($taxs as $tax) {
                 $name = $this->defValue($xpt->query('cac:TaxCategory/cac:TaxScheme/cbc:Name', $tax));
                 $val = floatval($this->defValue($xpt->query('cbc:TaxAmount', $tax),0));
                 $percentage = floatval($this->defValue($xpt->query('cac:TaxCategory/cbc:Percent', $tax)));
+                $taxable = floatval($this->defValue($xpt->query('cbc:TaxableAmount',$tax)));
                 switch ($name) {
                     case 'IGV':
                         $det->setIgv($val);
+                        $det->setMtoBaseIgv($taxable);
                         $det->setPorcentajeIgv($percentage);
                         $det->setTipAfeIgv($this->defValue($xpt->query('cac:TaxCategory/cbc:TaxExemptionReasonCode', $tax)));
                         break;
                     case 'ISC':
                         $det->setIsc($val);
+                        $det->setMtoBaseIsc($taxable);
                         $det->setPorcentajeIsc($percentage);
                         $det->setTipSisIsc($this->defValue($xpt->query('cac:TaxCategory/cbc:TierRange', $tax)));
+                        break;
+                    case 'ICBPER':
+                        $det->setIcbper($val);
+                        $det->setFactorIcbper($this->defValue($xpt->query('cbc:PerUnitAmount', $tax)));
+                        $det->setCantidad($this->defValue($xpt->query('cbc:BaseUnitMeasure', $tax)));
+                        $det->setUnidad($xpt->query('cbc:BaseUnitMeasure', $tax)->item(0)->getAttribute('unitCode'));
+                        $det->setPorcentajeIsc($percentage);
+                        $det->setTipSisIsc($this->defValue($xpt->query('cac:TaxCategory/cbc:TierRange', $tax)));
+                        break;
+                    case 'OTROS':
+                        $det->setOtroTributo($val);
+                        $det->setMtoBaseOth($taxable);
+                        $det->setPorcentajeOth($percentage);
                         break;
                 }
             }
