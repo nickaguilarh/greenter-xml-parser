@@ -285,11 +285,14 @@ class InvoiceParser implements DocumentParserInterface
         foreach ($nodes as $node) {
             $qt = $xpt->query('cbc:InvoicedQuantity', $node)->item(0);
             $det = new SaleDetail();
+            $description = $this->defValue($xpt->query('cac:Item/cbc:Description', $node));
+            $parsed = explode('@@', $description);
+            count($parsed) > 1 ? $description = $parsed[1] : null;
             $det->setCantidad(floatval($qt->nodeValue))
                 ->setUnidad($qt->getAttribute('unitCode'))
                 ->setMtoValorVenta(floatval($this->defValue($xpt->query('cbc:LineExtensionAmount', $node))))
                 ->setMtoValorUnitario(floatval($this->defValue($xpt->query('cac:Price/cbc:PriceAmount', $node))))
-                ->setDescripcion($this->defValue($xpt->query('cac:Item/cbc:Description', $node)))
+                ->setDescripcion($description)
                 ->setCodProducto($this->defValue($xpt->query('cac:Item/cac:SellersItemIdentification/cbc:ID', $node)))
                 ->setCodProdSunat($this->defValue($xpt->query('cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode', $node)))
                 ->setCodProdGS1($this->defValue($xpt->query('cac:Item/cac:StandardItemIdentification/cbc:ID', $node)))
